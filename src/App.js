@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import CryptoJS from "crypto-js";
 import { db } from './firebase';
 //import { collection, addDoc, getDocs } from 'firebase/firestore
-import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+//import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, getDocs} from 'firebase/firestore';
 import { Timestamp } from "firebase/firestore";
 
 function fillAra() {
@@ -51,8 +52,7 @@ function toHexGroupedBy4Bytes(byteArray) {
 
 function desEncrypt(text, keyBytes, ivBytes) {
   const toHex = (bytes) => bytes.map(b => ("00" + b.toString(16)).slice(-2)).join(" ");
-  const toHexSpaced = (bytes) => bytes.map(b => ("00" + b.toString(16)).slice(-2)).join(" ").toUpperCase();
-
+  
   const key = CryptoJS.enc.Hex.parse(byteArrayToHex(keyBytes));
   const iv = CryptoJS.enc.Hex.parse(byteArrayToHex(ivBytes));
 
