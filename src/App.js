@@ -1,5 +1,9 @@
 import React, { useState } from "react";
 import CryptoJS from "crypto-js";
+import { db } from './firebase';
+//import { collection, addDoc, getDocs } from 'firebase/firestore
+import { collection, addDoc, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { Timestamp } from "firebase/firestore";
 
 function fillAra() {
   return [
@@ -79,11 +83,74 @@ function toHex(val) {
   return "0x" + hex.padStart(4, "0");
 }
 
+async function testWrite() {
+  try {
+    const docRef = await addDoc(collection(db, "testCollection"), {
+      message: "Hello Firebase!",
+      timestamp: Date.now()
+    });
+    alert("Document written with ID: " + docRef.id);
+  } catch (e) {
+    console.error("Error adding document: ", e);
+  }
+}
+
+
+
+
+
 function App() {
   const [tnop, setTnop] = useState("");
   const [tcnt, setTcnt] = useState("");
   const [tcrd, setTcrd] = useState("");
   const [output, setOutput] = useState({ vhcr: "", keyHex: "", ivHex: "" });
+  
+  async function saveToDatabase() {
+  try {
+    await addDoc(collection(db, "encryptHistory"), {
+      tnop,
+      tcnt,
+      tcrd,
+      timestamp: Date.now()
+    });
+    alert("Saved to database!");
+  } catch (e) {
+    console.error("Error adding document: ", e);
+  }
+}
+
+async function loadHistory() {
+  try {
+    const querySnapshot = await getDocs(collection(db, "encryptHistory"));
+    const allData = [];
+
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+
+      let readableTimestamp = "";
+
+      if (data.timestamp instanceof Timestamp) {
+        readableTimestamp = data.timestamp.toDate().toLocaleString();
+      } else if (typeof data.timestamp === "number") {
+        readableTimestamp = new Date(data.timestamp).toLocaleString();
+      } else {
+        readableTimestamp = data.timestamp || "";
+      }
+
+      allData.push({
+        ...data,
+        readableTimestamp,
+      });
+    });
+
+    console.log("History:", allData);
+    alert(JSON.stringify(allData, null, 2));
+  } catch (e) {
+    console.error("Error fetching history: ", e);
+  }
+}
+
+
 
   function handleEncrypt() {
     const ara = fillAra();
@@ -143,6 +210,14 @@ function App() {
         <button onClick={handleEncrypt} style={{ padding: "10px 20px" }}>
           Encrypt
         </button>
+		<button onClick={saveToDatabase} style={{ padding: "10px 20px", marginLeft: "10px" }}>
+		  Save
+		</button>
+		<button onClick={loadHistory} style={{ padding: "10px 20px", marginLeft: "10px" }}>
+		  Load History
+		</button>
+		<button onClick={testWrite}>Test Firebase Write</button>
+		
       </div>
 
       <div style={{ fontFamily: "monospace", wordWrap: "break-word" }}>
