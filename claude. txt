@@ -1,0 +1,296 @@
+import { useState, useEffect } from 'react';
+
+function App() {
+  const [tnop, setTnop] = useState('');
+  const [tcnt, setTcnt] = useState('');
+  const [tcrd, setTcrd] = useState('');
+  const [output, setOutput] = useState({ vhcr: '', keyHex: '', ivHex: '' });
+  const [history, setHistory] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // AES encryption using Web Crypto API
+  const handleEncrypt = async () => {
+    if (!tnop || !tcnt || !tcrd) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      
+      // Create key material from tnop and tcnt
+      const keyMaterial = `${tnop}-${tcnt}`;
+      const encoder = new TextEncoder();
+      const keyData = encoder.encode(keyMaterial.padEnd(32, '0').substring(0, 32));
+      
+      // Import key
+      const key = await crypto.subtle.importKey(
+        'raw',
+        keyData,
+        { name: 'AES-CBC', length: 256 },
+        false,
+        ['encrypt']
+      );
+      
+      // Generate IV from tcnt
+      const ivData = encoder.encode(tcnt.toString().padEnd(16, '0').substring(0, 16));
+      
+      // Encrypt
+      const encryptedData = await crypto.subtle.encrypt(
+        { name: 'AES-CBC', iv: ivData },
+        key,
+        encoder.encode(tcrd)
+      );
+      
+      // Convert to hex
+      const encryptedArray = new Uint8Array(encryptedData);
+      const vhcr = Array.from(encryptedArray)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      
+      const keyHex = Array.from(keyData)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      
+      const ivHex = Array.from(ivData)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      
+      setOutput({ vhcr, keyHex, ivHex });
+    } catch (error) {
+      alert('Encryption failed: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveToDatabase = async () => {
+    if (!output.vhcr) return;
+
+    try {
+      setLoading(true);
+      const timestamp = Date.now();
+      const record = {
+        tnop,
+        tcnt,
+        tcrd,
+        vhcr: output.vhcr,
+        timestamp,
+        readableTimestamp: new Date(timestamp).toLocaleString()
+      };
+
+      // Save to storage
+      await window.storage.set(
+        `encryption:${timestamp}`,
+        JSON.stringify(record)
+      );
+
+      alert('Saved successfully!');
+      await loadHistory();
+    } catch (error) {
+      alert('Save failed: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadHistory = async () => {
+    try {
+      setLoading(true);
+      const result = await window.storage.list('encryption:');
+      
+      if (result && result.keys) {
+        const records = [];
+        for (const key of result.keys) {
+          try {
+            const item = await window.storage.get(key);
+            if (item && item.value) {
+              records.push(JSON.parse(item.value));
+            }
+          } catch (e) {
+            console.log('Key not found:', key);
+          }
+        }
+        
+        // Sort by timestamp descending
+        records.sort((a, b) => b.timestamp - a.timestamp);
+        setHistory(records);
+      } else {
+        setHistory([]);
+      }
+    } catch (error) {
+      console.error('Load failed:', error);
+      setHistory([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load history on mount
+  useEffect(() => {
+    loadHistory();
+  }, []);
+
+  return (
+    <div style={{ padding: "20px", maxWidth: "800px", margin: "0 auto" }}>
+      <h2>*** Encryptor *** 0608 AH *** 1888 DH ***</h2>
+      
+      <div style={{ marginBottom: "20px" }}>
+        <input
+          type="number"
+          placeholder="Tnop (Number)"
+          value={tnop}
+          onChange={(e) => {
+            setTnop(e.target.value);
+            setOutput({ vhcr: "", keyHex: "", ivHex: "" });
+          }}
+          style={{ width: "100%", padding: "8px", marginBottom: "8px", fontSize: "14px" }}
+        />
+        <input
+          type="number"
+          placeholder="Tcnt (Number)"
+          value={tcnt}
+          onChange={(e) => {
+            setTcnt(e.target.value);
+            setOutput({ vhcr: "", keyHex: "", ivHex: "" });
+          }}
+          style={{ width: "100%", padding: "8px", marginBottom: "8px", fontSize: "14px" }}
+        />
+        <input
+          placeholder="Tcrd (Text to Encrypt)"
+          value={tcrd}
+          onChange={(e) => {
+            setTcrd(e.target.value);
+            setOutput({ vhcr: "", keyHex: "", ivHex: "" });
+          }}
+          style={{ width: "100%", padding: "8px", marginBottom: "8px", fontSize: "14px" }}
+        />
+
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button 
+            onClick={handleEncrypt} 
+            disabled={loading}
+            style={{ 
+              padding: "10px 20px",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.6 : 1
+            }}
+          >
+            {loading ? 'Processing...' : 'Encrypt'}
+          </button>
+
+          <button
+            onClick={saveToDatabase}
+            disabled={!output.vhcr || loading}
+            style={{
+              padding: "10px 20px",
+              opacity: (output.vhcr && !loading) ? 1 : 0.5,
+              cursor: (output.vhcr && !loading) ? "pointer" : "not-allowed",
+            }}
+          >
+            Save
+          </button>
+
+          <button
+            onClick={loadHistory}
+            disabled={loading}
+            style={{ 
+              padding: "10px 20px",
+              cursor: loading ? "not-allowed" : "pointer",
+              opacity: loading ? 0.6 : 1
+            }}
+          >
+            Load History
+          </button>
+        </div>
+      </div>
+
+      {output.vhcr && (
+        <div style={{ 
+          marginBottom: "20px", 
+          padding: "15px", 
+          backgroundColor: "#f5f5f5", 
+          borderRadius: "5px" 
+        }}>
+          <h3>Encrypted Output:</h3>
+          <p style={{ 
+            fontFamily: "monospace", 
+            wordBreak: "break-all",
+            fontSize: "12px",
+            backgroundColor: "#fff",
+            padding: "10px",
+            borderRadius: "3px"
+          }}>
+            {output.vhcr}
+          </p>
+        </div>
+      )}
+
+      <div style={{ marginTop: "30px" }}>
+        <h3>Encryption History ({history.length} records)</h3>
+        <div style={{ overflowX: "auto" }}>
+          <table
+            style={{ 
+              width: "100%",
+              borderCollapse: "collapse", 
+              marginTop: "10px",
+              fontSize: "13px"
+            }}
+          >
+            <thead>
+              <tr style={{ backgroundColor: "#f0f0f0" }}>
+                <th style={{ border: "1px solid #ddd", padding: "8px" }}>TNOP</th>
+                <th style={{ border: "1px solid #ddd", padding: "8px" }}>TCNT</th>
+                <th style={{ border: "1px solid #ddd", padding: "8px" }}>TCRD</th>
+                <th style={{ border: "1px solid #ddd", padding: "8px" }}>VHCR</th>
+                <th style={{ border: "1px solid #ddd", padding: "8px" }}>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.length === 0 ? (
+                <tr>
+                  <td 
+                    colSpan="5" 
+                    style={{ 
+                      border: "1px solid #ddd", 
+                      padding: "20px", 
+                      textAlign: "center",
+                      color: "#999"
+                    }}
+                  >
+                    No encryption history yet. Encrypt and save to see records here.
+                  </td>
+                </tr>
+              ) : (
+                history.map((item, index) => (
+                  <tr key={index} style={{ backgroundColor: index % 2 === 0 ? "#fff" : "#f9f9f9" }}>
+                    <td style={{ border: "1px solid #ddd", padding: "8px" }}>{item.tnop}</td>
+                    <td style={{ border: "1px solid #ddd", padding: "8px" }}>{item.tcnt}</td>
+                    <td style={{ border: "1px solid #ddd", padding: "8px" }}>{item.tcrd}</td>
+                    <td style={{ 
+                      border: "1px solid #ddd", 
+                      padding: "8px",
+                      fontFamily: "monospace",
+                      fontSize: "11px",
+                      maxWidth: "200px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    }}>
+                      {item.vhcr}
+                    </td>
+                    <td style={{ border: "1px solid #ddd", padding: "8px", whiteSpace: "nowrap" }}>
+                      {item.readableTimestamp}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default App;
